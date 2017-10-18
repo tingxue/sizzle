@@ -1,1 +1,9 @@
-test/qunit
+.project
+.settings
+*~
+*.diff
+*.patch
+*.sizecache.json
+.DS_Store
+node_modules
+bower_components

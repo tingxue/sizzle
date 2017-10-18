@@ -1,17 +1,29 @@
 /*
  * Performance test suite using benchmark.js
  */
-
-/*global console: true*/
-
-define([ "require", "benchmark.js/benchmark", "domReady!", "text!selectors.css", "data/checkJava" ],
-function( require, Benchmark, document, selectors ) {
+require([
+	"../external/benchmark/benchmark",
+	"../external/requirejs-domready/domReady!",
+	"../external/requirejs-text/text!selectors.css"
+],
+function( Benchmark, document, selectors ) {
 
 	// Convert selectors to an array
-	selectors = selectors.split("\n");
+	selectors = (function() {
+		var s = selectors.split( "\n" ),
+			i = 0;
+
+		for ( ; i < s.length; i++ ) {
+			if ( !s[ i ] ) {
+				s.splice( i--, 1 );
+			}
+		}
+		return s;
+	})();
 
 	var // Used to indicate whether console profiling is begin run
 		profiling,
+		trim,
 
 		// Class manipulation
 		// IE doesn't match non-breaking spaces with \s
@@ -51,9 +63,6 @@ function( require, Benchmark, document, selectors ) {
 		maxTime = 0.5,
 		minSamples = 3,
 
-		// Queue for benchmark suites
-		suites = [],
-
 		// Keep track of all iframes
 		iframes = {},
 
@@ -62,13 +71,14 @@ function( require, Benchmark, document, selectors ) {
 
 		// Selector engines
 		engines = {
-			// "qsa":            "d.querySelectorAll( s )",
-			"jquery-1.7.2":   "jQuery.find( s, d )",
-			"jquery-1.8.1":   "jQuery.find( s, d )",
-			"sizzle":         "Sizzle( s, d )",
-			"dojo":           "dojo.query( s, d )",
-			"mootools-slick": "Slick.search( d, s )",
-			"nwmatcher":      "NW.Dom.select( s, d )"
+			// "qsa":                  "d.querySelectorAll( s )",
+			"jquery-1.7.2/jquery":  "jQuery.find( s, d )",
+			// "jquery-1.8.3/jquery":  "jQuery.find( s, d )",
+			"sizzle-old/sizzle":    "Sizzle( s, d )",
+			"sizzle":               "Sizzle( s, d )",
+			// "dojo/dojo":            "dojo.query( s, d )",
+			"mootools-slick/slick": "Slick.search( d, s )",
+			"nwmatcher/nwmatcher":  "NW.Dom.select( s, d )"
 		},
 
 		// Keeps track of overall scores
@@ -113,7 +123,7 @@ function( require, Benchmark, document, selectors ) {
 	 * @private
 	 * @param {String} str The string to trim
 	 */
-	var trim = ptrim ?
+	trim = ptrim ?
 		function( str ) {
 			return ptrim.call( str );
 		} :
@@ -129,18 +139,6 @@ function( require, Benchmark, document, selectors ) {
 	 */
 	function get( id ) {
 		return document.getElementById( id );
-	}
-
-	/**
-	 * Returns whether the element has the given class
-	 *
-	 * @private
-	 * @param {Element} elem The element to check
-	 * @param {String} classStr The className property is scanned for this class
-	 */
-	function hasClass( elem, classStr ) {
-		return elem && classStr &&
-			(" " + elem.className + " ").indexOf( " " + classStr + " " ) > -1;
 	}
 
 	/**
@@ -301,15 +299,17 @@ function( require, Benchmark, document, selectors ) {
 
 		// Build out headers
 		for ( engine in engines ) {
-			headers += "<th class='text-right'>" + engine + "</th>";
+			headers += "<th class='text-right'>" + engine.match( /^[^/]+/ )[ 0 ] + "</th>";
 			emptyColumns += "<td class='text-right' data-engine='" + engine + "'>&nbsp;</td>";
 		}
 
 		// Build out initial rows
 		for ( ; i < len; i++ ) {
-			rows += "<tr><td id='selector" + i + "' class='small selector'><span>" + selectors[i] + "</span></td>" + emptyColumns + "</tr>";
+			rows += "<tr><td id='selector" + i + "' class='small selector'><span>" +
+				selectors[i] + "</span></td>" + emptyColumns + "</tr>";
 		}
-		rows += "<tr><td id='results' class='bold'>Total (more is better)</td>" + emptyColumns + "</tr>";
+		rows += "<tr><td id='results' class='bold'>Total (more is better)</td>" +
+			emptyColumns + "</tr>";
 
 		get("perf-table-headers").innerHTML = headers;
 		get("perf-table-body").innerHTML = rows;
@@ -331,7 +331,8 @@ function( require, Benchmark, document, selectors ) {
 				"&qsa=" + useQSA ),
 			iframe = document.createElement("iframe");
 		iframe.setAttribute( "src", src );
-		iframe.style.cssText = "width: 500px; height: 500px; position: absolute; top: -600px; left: -600px; visibility: hidden;";
+		iframe.style.cssText = "width: 500px; height: 500px; position: absolute; " +
+			"top: -600px; left: -600px; visibility: hidden;";
 		document.body.appendChild( iframe );
 		iframes[ suite ].push( iframe );
 		return iframe;
@@ -358,7 +359,12 @@ function( require, Benchmark, document, selectors ) {
 		 */
 		function test( document ) {
 			var win = this,
-				select = new Function( "w", "s", "d", "return " + (engine !== "qsa" ? "w." : "") + engines[ engine ] );
+				select = new Function(
+					"w",
+					"s",
+					"d",
+					"return " + (engine !== "qsa" ? "w." : "") + engines[ engine ]
+				);
 			suite.add( engine, function() {
 				returned[ engine ][ selector ] = select( win, selector, document );
 			});
@@ -391,7 +397,7 @@ function( require, Benchmark, document, selectors ) {
 	 * @param {String} selector Selector to test
 	 */
 	function testSelector( selector ) {
-		var engine, len,
+		var engine,
 			suite = Benchmark.Suite( selector ),
 			name = suite.name,
 			count = numEngines;
@@ -420,11 +426,11 @@ function( require, Benchmark, document, selectors ) {
 
 	/**
 	 * Adds the bench to the list of failures to indicate
-	 *   failture on cycle. Aborts and returns false.
+	 *   failure on cycle. Aborts and returns false.
 	 *
 	 * @param {Object} event Benchmark.Event instance
 	 */
-	function onError( event ) {
+	function onError() {
 		errors[ this.id ] = true;
 		this.abort();
 		return false;
@@ -434,7 +440,7 @@ function( require, Benchmark, document, selectors ) {
 	 * Callback for the start of each test
 	 * Adds the `pending` class to the selector column
 	 */
-	function onStart( event ) {
+	function onStart() {
 		profile( selectors[selectorIndex] );
 		var selectorElem = get( "selector" + selectorIndex );
 		addClass( selectorElem, "pending" );
@@ -539,7 +545,7 @@ function( require, Benchmark, document, selectors ) {
 		try {
 			// Errors in IE
 			delete window.iframeCallbacks[ this.name ];
-		} catch( e ) {}
+		} catch ( e ) {}
 
 		if ( ++selectorIndex < selectors.length ) {
 			testSelector( selectors[selectorIndex] );
@@ -572,7 +578,7 @@ function( require, Benchmark, document, selectors ) {
 
 			// Add totals to table
 			i = firstTestedColumn();
-			while( (elem = tds[ i++ ]) ) {
+			while ( (elem = tds[ i++ ]) ) {
 				attr = elem.getAttribute("data-engine");
 				if ( attr === fastest ) {
 					addClass( elem, "green" );

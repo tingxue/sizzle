@@ -1,14 +1,18 @@
-var jQuery = this.jQuery || "jQuery", // For testing .noConflict()
-	$ = this.$ || "$",
-	originaljQuery = jQuery,
-	original$ = $;
-
 (function() {
-	// Nullify querySelector all if noqsa=true is in the params
-	// Isolates the Sizzle API
-	QUnit.config.urlConfig.push( "noqsa" );
-	if ( QUnit.urlParams.noqsa ) {
+
+	// Config parameter to force basic code paths
+	QUnit.config.urlConfig.push({
+		id: "basic",
+		label: "Bypass optimizations",
+		tooltip: "Force use of the most basic code by disabling native querySelectorAll; contains; compareDocumentPosition"
+	});
+	if ( QUnit.urlParams.basic ) {
 		document.querySelectorAll = null;
+		document.documentElement.contains = null;
+		document.documentElement.compareDocumentPosition = null;
+		// Return array of length two to pass assertion
+		// But support should be false as its not native
+		document.getElementsByClassName = function() { return [ 0, 1 ]; };
 	}
 })();
 
@@ -44,7 +48,9 @@ function t( a, b, c ) {
 		s += ( s && "," ) + '"' + f[ i ].id + '"';
 	}
 
-	deepEqual(f, q.apply( q, c ), a + " (" + b + ")");
+	// TODO refactor to parameterize assert (or remove entirely)
+	QUnit.config.current.assert.deepEqual(f, q.apply( q, c ), a + " (" + b + ")");
+
 }
 
 /**
@@ -57,7 +63,8 @@ function t( a, b, c ) {
  * @result "data/test.php?foo=bar&10538358345554"
  */
 function url( value ) {
-	return value + (/\?/.test(value) ? "&" : "?") + new Date().getTime() + "" + parseInt(Math.random()*100000);
+	return ( window.__karma__ ? "base/test/" : "" ) + value +
+		(/\?/.test(value) ? "&" : "?") + new Date().getTime() + "" + parseInt(Math.random()*100000);
 }
 
 var createWithFriesXML = function() {
@@ -87,8 +94,28 @@ var createWithFriesXML = function() {
 		</soap:Body> \
 	</soap:Envelope>';
 
-	return jQuery.parseXML(string);
+	return jQuery.parseXML( string );
 };
 
+function testIframeWithCallback( title, fileName, func ) {
+	QUnit.test( title, function( assert ) {
+		var iframe,
+			done = assert.async();
 
-function moduleTeardown(){}
+		window.iframeCallback = function() {
+			var args = arguments;
+			setTimeout(function() {
+				window.iframeCallback = undefined;
+				func.apply( assert, args );
+				func = function() {};
+				iframe.remove();
+				done();
+			}, 0 );
+		};
+		iframe = jQuery( "<div/>" ).css({ position: "absolute", width: "500px", left: "-600px" })
+			.append( jQuery( "<iframe/>" ).attr( "src", url( "data/" + fileName ) ) )
+			.appendTo( "#qunit-fixture" );
+	});
+};
+
+window.iframeCallback = undefined;
